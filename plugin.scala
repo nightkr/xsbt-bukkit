@@ -4,7 +4,12 @@ import Cache._
 
 import xsbt.api.Discovery
 
+import org.yaml.snakeyaml
+import snakeyaml.Yaml
+
 import java.io.{FileOutputStream, BufferedOutputStream}
+
+import scala.collection.JavaConverters._
 
 object BukkitPlugin extends Plugin {
 	sealed trait BukkitLoadTime
@@ -17,10 +22,12 @@ object BukkitPlugin extends Plugin {
 	val bukkitPluginAuthors = SettingKey[Seq[String]]("bukkit-plugin-authors", "Authors of the bukkit plugin")
 	val bukkitPluginLoadTime = SettingKey[BukkitLoadTime]("bukkit-plugin-load", "When the plugin should be loaded")
 	val bukkitPluginClass = TaskKey[Option[String]]("bukkit-plugin-class", "Bukkit plugin main class")
+	val bukkitPluginSoftDependencies = SettingKey[Seq[String]]("bukkit-plugin-soft-dependencies")
+	val bukkitPluginDependencies = SettingKey[Seq[String]]("bukkit-plugin-dependencies")
 
 	val discoveredBukkitPluginClasses = TaskKey[Seq[String]]("bukkit-plugin-classes", "Discovered Bukkit plugin main classes")
 
-	val bukkitPluginManifest = TaskKey[Map[String, String]]("bukkit-plugin-manifest", "Bukkit plugin manifest")
+	val bukkitPluginManifest = TaskKey[Map[String, Any]]("bukkit-plugin-manifest", "Bukkit plugin manifest")
 	val generateBukkitPluginManifest = TaskKey[Seq[File]]("bukkit-plugin-generate-manifest")
 
 	val bukkitSettings = Seq[Project.Setting[_]](
@@ -35,22 +42,25 @@ object BukkitPlugin extends Plugin {
 		} storeAs discoveredBukkitPluginClasses triggeredBy (compile in Compile),
 		bukkitPluginClass in run <<= discoveredBukkitPluginClasses.map(SelectMainClass(Some(SimpleReader readLine _), _)),
 		bukkitPluginClass <<= discoveredBukkitPluginClasses.map(SelectMainClass(None, _)),
+		bukkitPluginSoftDependencies := Seq(),
+		bukkitPluginDependencies := Seq(),
 
-		bukkitPluginManifest <<= (name, version, bukkitPluginAuthors, bukkitPluginLoadTime, bukkitPluginClass) map { (name, version, authors, load, plugin) => Map(
+		bukkitPluginManifest <<= (name, version, bukkitPluginAuthors, bukkitPluginLoadTime, bukkitPluginClass, bukkitPluginSoftDependencies, bukkitPluginDependencies) map { (name, version, authors, load, plugin, softDeps, deps) => Map(
 				"name" -> name,
 				"version" -> version,
-				"authors" -> ("[" + (authors mkString ", ") + "]"),
+				"authors" -> authors.asJava,
 				"load" -> (load match {
 					case BukkitLoadOnStartup => "STARTUP"
 					case BukkitLoadPostWorld => "POSTWORLD"
 				}),
-				"main" -> (plugin getOrElse sys.error("No Bukkit plugin main class detected."))
+				"main" -> (plugin getOrElse sys.error("No Bukkit plugin main class detected.")),
+				"softdepend" -> softDeps.asJava,
+				"depend" -> deps.asJava
 			)
 		},
 		generateBukkitPluginManifest <<= (bukkitPluginManifest, resourceManaged) map { (manifest, targetDir) =>
-			val strManifest = manifest map {
-				case (key, value) => key + ": " + value + "\r\n"
-			} mkString ""
+			val yaml = new Yaml
+			val strManifest = yaml.dump(manifest.asJava)
 			val target = targetDir / "plugin.yml"
 			IO.write(target, strManifest)
 			Seq[File](target)
