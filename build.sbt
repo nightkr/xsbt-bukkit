@@ -2,7 +2,7 @@ name := "xsbt-bukkit"
 
 organization := "se.nullable.xsbt-bukkit"
 
-version := "0.0.1-SNAPSHOT"
+version := "0.0.1"
 
 sbtPlugin := true
 
