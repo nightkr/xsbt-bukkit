@@ -16,6 +16,8 @@ object BukkitPlugin extends Plugin {
 	case object BukkitLoadOnStartup extends BukkitLoadTime
 	case object BukkitLoadPostWorld extends BukkitLoadTime
 
+	case class BukkitCommand(aliases: Seq[String])
+
 	val bukkitVersion = SettingKey[String]("bukkit-version", "Version of bukkit to compile against")
 	val craftbukkitVersion = SettingKey[String]("craftbukkit-version", "Version of craftbukkit to test against")
 
@@ -24,6 +26,7 @@ object BukkitPlugin extends Plugin {
 	val bukkitPluginClass = TaskKey[Option[String]]("bukkit-plugin-class", "Bukkit plugin main class")
 	val bukkitPluginSoftDependencies = SettingKey[Seq[String]]("bukkit-plugin-soft-dependencies")
 	val bukkitPluginDependencies = SettingKey[Seq[String]]("bukkit-plugin-dependencies")
+	val bukkitPluginCommands = SettingKey[Map[String, BukkitCommand]]("bukkit-plugin-commands")
 
 	val discoveredBukkitPluginClasses = TaskKey[Seq[String]]("bukkit-plugin-classes", "Discovered Bukkit plugin main classes")
 
@@ -44,8 +47,10 @@ object BukkitPlugin extends Plugin {
 		bukkitPluginClass <<= discoveredBukkitPluginClasses.map(SelectMainClass(None, _)),
 		bukkitPluginSoftDependencies := Seq(),
 		bukkitPluginDependencies := Seq(),
+		bukkitPluginCommands := Map(),
 
-		bukkitPluginManifest <<= (name, version, bukkitPluginAuthors, bukkitPluginLoadTime, bukkitPluginClass, bukkitPluginSoftDependencies, bukkitPluginDependencies) map { (name, version, authors, load, plugin, softDeps, deps) => Map(
+		bukkitPluginManifest <<= (name, version, bukkitPluginAuthors, bukkitPluginLoadTime, bukkitPluginClass, bukkitPluginSoftDependencies, bukkitPluginDependencies, bukkitPluginCommands) map {
+			(name, version, authors, load, plugin, softDeps, deps, commands) => Map(
 				"name" -> name,
 				"version" -> version,
 				"authors" -> authors.asJava,
@@ -55,7 +60,12 @@ object BukkitPlugin extends Plugin {
 				}),
 				"main" -> (plugin getOrElse sys.error("No Bukkit plugin main class detected.")),
 				"softdepend" -> softDeps.asJava,
-				"depend" -> deps.asJava
+				"depend" -> deps.asJava,
+				"commands" -> (commands map { case (name, metadata) =>
+					name -> Map(
+						"alias" -> metadata.aliases.asJava
+					).asJava
+				} asJava)
 			)
 		},
 		generateBukkitPluginManifest <<= (bukkitPluginManifest, resourceManaged) map { (manifest, targetDir) =>
